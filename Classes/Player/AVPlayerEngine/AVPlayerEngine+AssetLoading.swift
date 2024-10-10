@@ -32,7 +32,15 @@ extension AVPlayerEngine {
          */
         let playerItem = AVPlayerItem(asset: newAsset.avAsset)
         playerItem.preferredPeakBitRate = newAsset.playerSettings.network.preferredPeakBitRate
-
+        
+        let metadataOutput = AVPlayerItemMetadataOutput(identifiers: nil)
+        metadataOutput.setDelegate(self, queue: DispatchQueue.main)
+        playerItem.add(metadataOutput)
+        
+        let metadataCollector = AVPlayerItemMetadataCollector()
+        metadataCollector.setDelegate(self, queue: DispatchQueue.main)
+        playerItem.add(metadataCollector)
+        
         if #available(iOS 13.0, tvOS 13.0, *) {
             playerItem.automaticallyPreservesTimeOffsetFromLive = newAsset.playerSettings.lowLatency.automaticallyPreservesTimeOffsetFromLive
             
@@ -44,7 +52,15 @@ extension AVPlayerEngine {
         if #available(iOS 10.0, tvOS 10.0, *) {
             playerItem.preferredForwardBufferDuration = newAsset.playerSettings.network.preferredForwardBufferDuration
         }
-
+        
+        if #available(iOS 11.0, tvOS 11.0, *) {
+            playerItem.preferredMaximumResolution = newAsset.playerSettings.network.preferredMaximumResolution
+        }
+        
+        if #available(iOS 14.0, tvOS 14.0, *) {
+            playerItem.startsOnFirstEligibleVariant = newAsset.playerSettings.network.startsOnFirstEligibleVariant
+        }
+    
         // Add observers
         self.removeObservers()
         self.addObservers()
@@ -115,5 +131,26 @@ extension AVPlayerEngine {
                 }
             }
         }
+    }
+}
+
+extension AVPlayerEngine: AVPlayerItemMetadataOutputPushDelegate {
+    
+    public func metadataOutput(_ output: AVPlayerItemMetadataOutput,
+                               didOutputTimedMetadataGroups groups: [AVTimedMetadataGroup],
+                               from track: AVPlayerItemTrack?) {
+        groups.forEach { group in
+            self.post(event: PlayerEvent.TimedMetadata(metadata: group.items))
+        }
+    }
+}
+
+extension AVPlayerEngine: AVPlayerItemMetadataCollectorPushDelegate {
+    
+    public func metadataCollector(_ metadataCollector: AVPlayerItemMetadataCollector, 
+                                  didCollect metadataGroups: [AVDateRangeMetadataGroup],
+                                  indexesOfNewGroups: IndexSet,
+                                  indexesOfModifiedGroups: IndexSet) {
+        self.post(event: PlayerEvent.MetadataGroups(metadata: metadataGroups))
     }
 }

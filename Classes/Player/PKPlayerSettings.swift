@@ -29,6 +29,18 @@ typealias SettingsChange = ((PlayerSettingsType) -> Void)
         }
     }
     
+    /// Indicates ta preferred maximum video resolution
+    ///
+    /// Set preferredMaximumResolution to non-zero to indicates a preferred maximum video resolution. This property only applies to HTTP Live Streaming assets.
+    /// zero is the default value and it indicates there is no limit on the video resolution
+    ///
+    /// @available(iOS 11.0, tvOS 11.0, *) via AVPlayerItem
+    @objc public var preferredMaximumResolution: CGSize = CGSize(width: 0, height: 0){
+        didSet {
+            self.onChange?(.preferredMaximumResolution(preferredMaximumResolution))
+        }
+    }
+    
     /// Indicates the media duration the caller prefers the player to buffer from the network ahead of the playhead to guard against playback disruption.
     ///
     /// The value is in seconds. If it is set to 0, the player will choose an appropriate level of buffering for most use cases.
@@ -53,6 +65,13 @@ typealias SettingsChange = ((PlayerSettingsType) -> Void)
         }
     }
     
+    /// A Boolean value that indicates whether playback starts with the first eligible variant that appears in the stream’s main playlist.
+    /// For further details please see Apple's documentation: https://developer.apple.com/documentation/avfoundation/avplayeritem/3579514-startsonfirsteligiblevariant?language=objc
+    @objc public var startsOnFirstEligibleVariant: Bool = false {
+        didSet {
+            self.onChange?(.startsOnFirstEligibleVariant(startsOnFirstEligibleVariant))
+        }
+    }
     /// Tells the player whether or not to buffer the media, or stop after initializing the asset and fetching the keys.
     ///
     /// Default value is true, initialize the asset, fetch the keys and buffer the media.
@@ -65,7 +84,9 @@ typealias SettingsChange = ((PlayerSettingsType) -> Void)
     @objc public func createCopy() -> PKNetworkSettings {
         let copy = PKNetworkSettings()
         copy.preferredPeakBitRate = self.preferredPeakBitRate
+        copy.preferredMaximumResolution = self.preferredMaximumResolution
         copy.preferredForwardBufferDuration = self.preferredForwardBufferDuration
+        copy.startsOnFirstEligibleVariant = self.startsOnFirstEligibleVariant
         copy.automaticallyWaitsToMinimizeStalling = self.automaticallyWaitsToMinimizeStalling
         
         return copy
@@ -143,11 +164,13 @@ typealias SettingsChange = ((PlayerSettingsType) -> Void)
 
 enum PlayerSettingsType {
     case preferredPeakBitRate(Double)
+    case preferredMaximumResolution(CGSize)
     case preferredForwardBufferDuration(Double)
     case automaticallyWaitsToMinimizeStalling(Bool)
     case configuredTimeOffsetFromLive(CMTime)
     case preventsDisplaySleepDuringVideoPlayback(Bool)
     case allowAudioFromVideoAssetInBackground(Bool)
+    case startsOnFirstEligibleVariant (Bool)
 }
 
 /************************************************************/

@@ -3,6 +3,7 @@
 import Foundation
 import CoreMedia
 import AVFoundation
+import UIKit
 
 /// `AdsPlayerEngineWrapperState` represents `AdsPlayerEngineWrapper` state machine states.
 enum AdsDAIPlayerEngineWrapperState: Int, StateProtocol {
@@ -22,7 +23,7 @@ public protocol AdsDAIPlayerEngineWrapperDelegate {
     func adPaused()
     func adResumed()
     func adCompleted()
-    func receivedTimedMetadata(_ metadata: [String : String])
+    func receivedTimedMetadata(_ metadata: [String: String])
 }
 
 public class AdsDAIPlayerEngineWrapper: PlayerEngineWrapper, AdsPluginDelegate, AdsPluginDataSource {
@@ -31,7 +32,9 @@ public class AdsDAIPlayerEngineWrapper: PlayerEngineWrapper, AdsPluginDelegate, 
         didSet {
             // Add timedMetadata observer
             if let avPlayerWrapper = playerEngine as? AVPlayerWrapper {
-                avPlayerWrapper.currentPlayer.addObserver(self, forKeyPath: "currentItem.timedMetadata", options: NSKeyValueObservingOptions.new, context: nil)
+                let metadataOutput = AVPlayerItemMetadataOutput(identifiers: nil)
+                metadataOutput.setDelegate(self, queue: DispatchQueue.main)
+                avPlayerWrapper.currentPlayer.currentItem?.add(metadataOutput)
             }
         }
     }
@@ -120,30 +123,6 @@ public class AdsDAIPlayerEngineWrapper: PlayerEngineWrapper, AdsPluginDelegate, 
         AppStateSubject.shared.add(observer: self)
         self.adsPlugin.delegate = self
         self.adsPlugin.dataSource = self
-    }
-    
-    public override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey : Any]?, context: UnsafeMutableRawPointer?) {
-        switch keyPath {
-        case "currentItem.timedMetadata":
-            if let avPlayerEngine = object as? AVPlayerEngine {
-                if let timedMetadata = avPlayerEngine.currentItem?.timedMetadata {
-                    for avMetadataItem in timedMetadata {
-                        
-                        let value = avMetadataItem.value as? String ?? ""
-                        if value.contains("google") {
-
-                            if let key = avMetadataItem.key, let value = avMetadataItem.stringValue {
-                                delegate?.receivedTimedMetadata([key.description : value])
-                            }
-                            
-                            return
-                        }
-                    }
-                }
-            }
-        default:
-            break
-        }
     }
     
     /************************************************************/
@@ -494,5 +473,25 @@ extension AdsDAIPlayerEngineWrapper: AppStateObservable {
                 self.adsPlugin.willEnterForeground()
             }
         ]
+    }
+}
+
+extension AdsDAIPlayerEngineWrapper: AVPlayerItemMetadataOutputPushDelegate {
+    
+    public func metadataOutput(_ output: AVPlayerItemMetadataOutput,
+                               didOutputTimedMetadataGroups groups: [AVTimedMetadataGroup],
+                               from track: AVPlayerItemTrack?) {
+        groups.forEach { group in
+            group.items.forEach { avMetadataItem in
+                
+                let value = avMetadataItem.value as? String ?? ""
+                if value.contains("google") {
+                    if let key = avMetadataItem.key, let value = avMetadataItem.stringValue {
+                        delegate?.receivedTimedMetadata([key.description: value])
+                    }
+                    return
+                }
+            }
+        }
     }
 }

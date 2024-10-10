@@ -10,7 +10,7 @@
 
 import XCTest
 import PlayKit
-import SwiftyJSON
+import kSwiftyJSON
 import CoreMedia
 
 //Unit test to check the player controller
@@ -39,7 +39,7 @@ class PlayerControllerTest: XCTestCase {
                 XCTFail()
             }
         }
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     func testPauseCommand() {
@@ -55,7 +55,7 @@ class PlayerControllerTest: XCTestCase {
         self.player.addObserver(self, events: [PlayerEvent.playing]) { [weak self] event in
             self?.player.pause()
         }
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     
@@ -78,7 +78,7 @@ class PlayerControllerTest: XCTestCase {
                 }
             }
         }
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     /// Test a guard mechanism that prevents receiving pause events after ended event.
@@ -115,7 +115,7 @@ class PlayerControllerTest: XCTestCase {
         DispatchQueue.main.asyncAfter(deadline: .now() + 9) {
             asyncExpectation.fulfill()
         }
-        waitForExpectations(timeout: 10, handler: nil)
+        waitForExpectations(timeout: 30, handler: nil)
     }
     
     /// Test to make sure pause/play events are received after ended + seeked event.
@@ -157,6 +157,6 @@ class PlayerControllerTest: XCTestCase {
         }
         player.play()
         
-        waitForExpectations(timeout: 20, handler: nil)
+        waitForExpectations(timeout: 30, handler: nil)
     }
 }

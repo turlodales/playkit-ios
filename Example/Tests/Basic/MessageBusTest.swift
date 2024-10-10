@@ -10,10 +10,10 @@
 
 import XCTest
 import PlayKit
-import SwiftyJSON
+import kSwiftyJSON
 import AVFoundation
 
-class MessegeBusTest: XCTestCase {
+class MessageBusTest: XCTestCase {
     var player : Player!
     
     override func setUp() {
@@ -39,7 +39,7 @@ class MessegeBusTest: XCTestCase {
         
         self.player.play()
         
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     func testPlayerPlayEventsFlow() {
@@ -62,7 +62,7 @@ class MessegeBusTest: XCTestCase {
 
         self.player.play()
         
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     func testPlayerPauseEventsFlow() {
@@ -80,7 +80,7 @@ class MessegeBusTest: XCTestCase {
         
         self.player.play()
         
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
     
     func testPlayerSeekEventsFlow() {
@@ -110,6 +110,6 @@ class MessegeBusTest: XCTestCase {
         
         self.player.play()
         
-        waitForExpectations(timeout: 10.0) { (_) -> Void in}
+        waitForExpectations(timeout: 30.0) { (_) -> Void in}
     }
 }

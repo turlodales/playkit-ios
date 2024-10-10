@@ -1,7 +1,7 @@
 // ===================================================================================================
 // Copyright (C) 2017 Kaltura Inc.
 //
-// Licensed under the AGPLv3 license, unless a different license for a 
+// Licensed under the AGPLv3 license, unless a different license for a
 // particular library is specified in the applicable library path.
 //
 // You may obtain a copy of the License at
@@ -25,8 +25,8 @@ extension AVPlayerEngine {
             #keyPath(currentItem.isPlaybackBufferEmpty),
             #keyPath(currentItem.isPlaybackBufferFull),
             #keyPath(currentItem.loadedTimeRanges),
-            #keyPath(currentItem.timedMetadata),
-            #keyPath(currentItem.duration)
+            #keyPath(currentItem.duration),
+            #keyPath(currentItem.tracks)
         ]
     }
     
@@ -40,11 +40,11 @@ extension AVPlayerEngine {
             addObserver(self, forKeyPath: keyPath, options: [.new, .initial], context: &AVPlayerEngine.observerContext)
         }
         
-        NotificationCenter.default.addObserver(self, selector: #selector(self.didFailToPlayToEndTime(_:)), name: .AVPlayerItemFailedToPlayToEndTime, object: self.currentItem)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.didPlayToEndTime(_:)), name: .AVPlayerItemDidPlayToEndTime, object: self.currentItem)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.onAccessLogEntryNotification), name: .AVPlayerItemNewAccessLogEntry, object: self.currentItem)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.onErrorLogEntryNotification), name: .AVPlayerItemNewErrorLogEntry, object: self.currentItem)
-        NotificationCenter.default.addObserver(self, selector: #selector(self.onPlaybackStalledNotification), name: .AVPlayerItemPlaybackStalled, object: self.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.didFailToPlayToEndTime(_:)), name: AVPlayerItem.failedToPlayToEndTimeNotification, object: self.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.didPlayToEndTime(_:)), name: AVPlayerItem.didPlayToEndTimeNotification, object: self.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.onAccessLogEntryNotification), name: AVPlayerItem.newAccessLogEntryNotification, object: self.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.onErrorLogEntryNotification), name: AVPlayerItem.newErrorLogEntryNotification, object: self.currentItem)
+        NotificationCenter.default.addObserver(self, selector: #selector(self.onPlaybackStalledNotification), name: AVPlayerItem.playbackStalledNotification, object: self.currentItem)
         NotificationCenter.default.addObserver(self, selector: #selector(self.timebaseChanged), name: Notification.Name(kCMTimebaseNotification_EffectiveRateChanged as String), object: nil)
     }
     
@@ -60,11 +60,11 @@ extension AVPlayerEngine {
             removeObserver(self, forKeyPath: keyPath, context: &AVPlayerEngine.observerContext)
         }
         
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemFailedToPlayToEndTime, object: self.currentItem)
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemDidPlayToEndTime, object: self.currentItem)
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemNewAccessLogEntry, object: self.currentItem)
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemNewErrorLogEntry, object: self.currentItem)
-        NotificationCenter.default.removeObserver(self, name: .AVPlayerItemPlaybackStalled, object: self.currentItem)
+        NotificationCenter.default.removeObserver(self, name: AVPlayerItem.failedToPlayToEndTimeNotification, object: self.currentItem)
+        NotificationCenter.default.removeObserver(self, name: AVPlayerItem.didPlayToEndTimeNotification, object: self.currentItem)
+        NotificationCenter.default.removeObserver(self, name: AVPlayerItem.newAccessLogEntryNotification, object: self.currentItem)
+        NotificationCenter.default.removeObserver(self, name: AVPlayerItem.newErrorLogEntryNotification, object: self.currentItem)
+        NotificationCenter.default.removeObserver(self, name: AVPlayerItem.playbackStalledNotification, object: self.currentItem)
         NotificationCenter.default.removeObserver(self, name: Notification.Name(kCMTimebaseNotification_EffectiveRateChanged as String), object: nil)
     }
     
@@ -177,10 +177,10 @@ extension AVPlayerEngine {
                 return
             }
             self.handle(playerItemStatus: newPlayerItemStatus)
-        case #keyPath(currentItem.timedMetadata):
-            self.handleTimedMedia()
         case #keyPath(currentItem.duration):
             self.handleDurationChanged()
+        case #keyPath(currentItem.tracks):
+            self.handleTracksCodecs()
         default: super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
         }
     }
@@ -205,13 +205,18 @@ extension AVPlayerEngine {
     @objc func timebaseChanged(notification: Notification) {
         // For some reason timebase rate changed is received on a background thread.
         // in order to check self.rate we must make sure we are on the main thread.
+    
         DispatchQueue.main.async {
             guard let timebase = self.currentItem?.timebase else { return }
             PKLog.verbose("timebase changed, current timebase: \(String(describing: timebase))")
             let timebaseRate = CMTimebaseGetRate(timebase)
             if timebaseRate > 0 && self.lastTimebaseRate != timebaseRate {
+                PKLog.verbose("timebaseChanged->PlayerEvent.Playing")
+
                 self.post(event: PlayerEvent.Playing())
             } else if timebaseRate == 0 && self.rate == 0 && self.lastTimebaseRate != timebaseRate {
+                PKLog.verbose("timebaseChanged->PlayerEvent.Pause")
+
                 self.post(event: PlayerEvent.Pause())
             }
             // Make sure to save the last value so we could only post events only when currentTimebase != lastTimebase
@@ -219,13 +224,57 @@ extension AVPlayerEngine {
         }
     }
     
+    /* When setting automaticallyWaitsToMinimizeStalling and shouldPlayImmediately, the player may be stalled and the rate will be changed to 0, player paused, by the AVPlayer. Therefor we are sending a paused event.
+     */
     /// Handles changes in player rate
     private func handleRate() {
-        PKLog.debug("player rate was changed, now: \(self.rate)")
-        // When setting automaticallyWaitsToMinimizeStalling and shouldPlayImmediately, the player may be stalled and the rate will be changed to 0, player paused, by the AVPlayer. Therefor we are sending a paused event.
+        PKLog.verbose("player rate was changed, now: \(self.rate)")
+        
         if let isPlaybackLikelyToKeepUp = self.currentItem?.isPlaybackLikelyToKeepUp, isPlaybackLikelyToKeepUp == false {
             if self.rate == 0, self.currentState == .buffering || self.currentState == .ready {
                 self.post(event: PlayerEvent.Pause())
+            }
+        }
+        
+        // In all other cases, the player manages pause in the timebaseChanged event!
+        //This is only when the user clicks the pause button on the exteranl TV remote control, and the app needs refreshing UI in sender device.
+        PKLog.debug("isAppInBackground = \(isAppInBackground)")
+        if isAppInBackground{
+
+            let isPaused = self.rate == 0
+            PKLog.debug("isPaused = \(isPaused)")
+
+            if isPaused{
+                if self.currentState != .idle && self.currentState != .ended && self.currentState != .error {
+                    PKLog.debug("player send pause event!!!")
+                    self.lastTimebaseRate = 0
+                    self.post(event: PlayerEvent.Pause())
+                }
+            }
+        }
+    }
+    
+    /// Handle changes in Audio/Video tracks codecs.
+    private func handleTracksCodecs() {
+        if #available(iOS 13.0, tvOS 13.0, *) {
+            
+            if let playerItem = currentItem {
+                playerItem.tracks.forEach { track in
+                    
+                    if let videoFormatDescriptions = track.assetTrack?.formatDescriptions as? [CMFormatDescription] {
+                        
+                        videoFormatDescriptions.forEach { formatDescription in
+                            switch formatDescription.mediaType {
+                            case .video:
+                                self.post(event: PlayerEvent.VideoTrackChanged(codecDescription: formatDescription.mediaSubType.description))
+                            case .audio:
+                                self.post(event: PlayerEvent.AudioTrackChanged(codecDescription: formatDescription.mediaSubType.description))
+                            default:
+                                break
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -305,12 +354,6 @@ extension AVPlayerEngine {
         if currentItem != nil, seekToLiveEdgeTriggered {
             self.seekToLiveEdge()
         }
-    }
-    
-    private func handleTimedMedia() {
-        guard let currentItem = self.currentItem else { return }
-        guard let metadata = currentItem.timedMetadata else { return }
-        self.post(event: PlayerEvent.TimedMetadata(metadata: metadata))
     }
     
     private func handleTracksSelection(_ tracks: PKTracks) {
